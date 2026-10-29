@@ -61,8 +61,6 @@ COMMIT;
 -- municipios pequenos (Buenavista, Genova, Pijao) tienen pocos.
 -- ---------------------------------------------------------------------
 DECLARE
-    -- cantidad de alojamientos por municipio (1..12), a proposito
-    -- asimetrica: Armenia=10, Salento=8, Filandia=6, resto variable
     TYPE t_num_tab IS TABLE OF NUMBER;
     v_alojam_por_municipio t_num_tab := t_num_tab(10, 5, 4, 3, 2, 2, 8, 6, 1, 2, 2, 1);
 
@@ -73,14 +71,9 @@ DECLARE
     v_num_habitaciones NUMBER;
     v_base_precio      NUMBER;
     v_mult_temporada   NUMBER;
-
-    v_nombres_finca  t_num_tab;
 BEGIN
     FOR m IN 1 .. 12 LOOP
         FOR a IN 1 .. v_alojam_por_municipio(m) LOOP
-
-            -- tipo de alojamiento aleatorio (mas probabilidad de
-            -- finca cafetera en municipios pequenos/rurales)
             v_tipo_alojam := TRUNC(DBMS_RANDOM.VALUE(1, 6));
 
             INSERT INTO alojamiento (
@@ -91,19 +84,17 @@ BEGIN
                 v_id_alojamiento,
                 'Alojamiento ' || v_id_alojamiento,
                 'Vereda/Calle ' || TRUNC(DBMS_RANDOM.VALUE(1, 99)) || ', municipio ' || m,
-                TRUNC(DBMS_RANDOM.VALUE(2, 6)),               -- 2 a 5 estrellas
+                TRUNC(DBMS_RANDOM.VALUE(2, 6)),
                 '300' || TRUNC(DBMS_RANDOM.VALUE(1000000, 9999999)),
                 'contacto' || v_id_alojamiento || '@turismouq.co',
                 m,
                 v_tipo_alojam
             );
 
-            -- numero de habitaciones: los hoteles (tipo 1) tienen
-            -- rangos mucho mas grandes que fincas/glampings/hostales
             IF v_tipo_alojam = 1 THEN
-                v_num_habitaciones := TRUNC(DBMS_RANDOM.VALUE(15, 41));  -- hotel: 15-40
+                v_num_habitaciones := TRUNC(DBMS_RANDOM.VALUE(15, 41));
             ELSE
-                v_num_habitaciones := TRUNC(DBMS_RANDOM.VALUE(3, 13));   -- resto: 3-12
+                v_num_habitaciones := TRUNC(DBMS_RANDOM.VALUE(3, 13));
             END IF;
 
             FOR h IN 1 .. v_num_habitaciones LOOP
@@ -125,18 +116,13 @@ BEGIN
                         'Habitacion tipo ' || v_tipo_hab, v_id_alojamiento
                     );
 
-                    -- precio base segun tipo de habitacion/alojamiento,
-                    -- con variacion aleatoria realista
                     v_base_precio := CASE v_tipo_hab
                                         WHEN 'Sencilla' THEN 80000
                                         WHEN 'Doble'    THEN 130000
                                         WHEN 'Suite'    THEN 220000
-                                        ELSE 300000  -- Cabana
+                                        ELSE 300000
                                       END * (CASE WHEN v_tipo_alojam = 1 THEN 1.3 ELSE 1 END);
 
-                    -- una tarifa por cada temporada (9), con multiplicador
-                    -- distinto segun el tipo de temporada: cada alojamiento
-                    -- decide su propio incremento, no es un % fijo
                     FOR t IN 1 .. 9 LOOP
                         SELECT CASE tipo
                                  WHEN 'Alta'  THEN DBMS_RANDOM.VALUE(1.3, 1.9)
@@ -163,9 +149,8 @@ BEGIN
 END;
 /
 
-
 -- ---------------------------------------------------------------------
--- 5. CLIENTE (200 clientes, ciudades variadas)
+-- 5. CLIENTE (Ampliación a 2.500 clientes registrados)
 -- ---------------------------------------------------------------------
 DECLARE
     TYPE t_str_tab IS TABLE OF VARCHAR2(40);
@@ -177,12 +162,12 @@ DECLARE
     v_ciudades  t_str_tab := t_str_tab('Bogota','Medellin','Cali','Barranquilla','Bucaramanga','Pereira',
                                         'Manizales','Ibague','Cucuta','Pasto','Armenia','Cartagena');
 BEGIN
-    FOR i IN 1 .. 200 LOOP
+    FOR i IN 1 .. 2500 LOOP
         INSERT INTO cliente (id_cliente, nombre, documento_identidad, correo, telefono, ciudad_origen)
         VALUES (
             i,
             v_nombres(TRUNC(DBMS_RANDOM.VALUE(1, 21))) || ' ' || v_apellidos(TRUNC(DBMS_RANDOM.VALUE(1, 16))),
-            TO_CHAR(TRUNC(DBMS_RANDOM.VALUE(1000000000, 1099999999))),
+            TO_CHAR(1000000000 + i), -- Garantiza unicidad en documento de identidad
             'cliente' || i || '@correo.com',
             '3' || TRUNC(DBMS_RANDOM.VALUE(100000000, 299999999)),
             v_ciudades(TRUNC(DBMS_RANDOM.VALUE(1, 13)))
@@ -224,7 +209,6 @@ BEGIN
 END;
 /
 
-
 -- ---------------------------------------------------------------------
 -- 7. RESERVA + RESERVA_HABITACION + PAGO + RESERVA_SERVICIO + RESENA
 -- Asimetria temporal: mas reservas en temporada alta que en baja.
@@ -238,7 +222,7 @@ DECLARE
     v_id_reserva_servicio   NUMBER := 1;
     v_id_resena             NUMBER := 1;
 
-    v_total_reservas  NUMBER := 650;   -- volumen base de reservas
+    v_total_reservas  NUMBER := 25500;
     v_id_alojamiento  NUMBER;
     v_id_cliente      NUMBER;
     v_checkin         DATE;
@@ -246,60 +230,36 @@ DECLARE
     v_estado          VARCHAR2(15);
     v_num_habs        NUMBER;
     v_id_habitacion   NUMBER;
-    v_valor_noche      NUMBER;
-    v_valor_estadia    NUMBER;
-    v_hoy              DATE := DATE '2026-10-02';  -- fecha de corte "hoy" del semestre
-    v_mes_peso         NUMBER;
-    v_servicios_count  NUMBER;
+    v_valor_noche     NUMBER;
+    v_valor_estadia   NUMBER;
+    v_hoy             DATE := DATE '2026-10-02';
+    v_mes_peso        NUMBER;
+    v_servicios_count NUMBER;
 BEGIN
     FOR i IN 1 .. v_total_reservas LOOP
-      DECLARE
-          v_mi_reserva NUMBER := v_id_reserva;  -- ID fijo de ESTA vuelta
-      BEGIN  -- bloque de seguridad: si ESTA reserva falla por algo
-             -- imprevisto, se salta y se sigue con la siguiente, en
-             -- vez de abortar las 650 de un solo golpe.
-        v_id_reserva := v_id_reserva + 1;  -- avanza el contador YA,
-             -- ANTES de cualquier INSERT, para que un fallo a medias
-             -- nunca reutilice este mismo ID en la siguiente vuelta.
-
-        -- --- fecha de checkin asimetrica: se favorecen los meses de
-        -- temporada alta (dic-ene, semana santa, jun-jul) usando un
-        -- peso mayor para esos rangos.
         v_mes_peso := TRUNC(DBMS_RANDOM.VALUE(1, 101));
         IF v_mes_peso <= 40 THEN
-            -- 40% de las reservas caen en meses de temporada alta
-            v_checkin := DATE '2026-06-01' + TRUNC(DBMS_RANDOM.VALUE(0, 61));  -- jun-jul
+            v_checkin := DATE '2026-06-01' + TRUNC(DBMS_RANDOM.VALUE(0, 61));
         ELSIF v_mes_peso <= 60 THEN
-            v_checkin := DATE '2025-12-15' + TRUNC(DBMS_RANDOM.VALUE(0, 32));  -- dic-ene
+            v_checkin := DATE '2025-12-15' + TRUNC(DBMS_RANDOM.VALUE(0, 32));
         ELSE
-            v_checkin := DATE '2026-01-16' + TRUNC(DBMS_RANDOM.VALUE(0, 320)); -- resto del anio
+            v_checkin := DATE '2026-01-16' + TRUNC(DBMS_RANDOM.VALUE(0, 320));
         END IF;
 
-        v_checkout := v_checkin + TRUNC(DBMS_RANDOM.VALUE(1, 8));  -- estadia 1-7 noches
+        v_checkout := v_checkin + TRUNC(DBMS_RANDOM.VALUE(1, 8));
 
-        -- --- alojamiento: distribucion asimetrica, favorece
-        -- alojamientos de Armenia (1-10) y Salento (ids calculados
-        -- segun el orden de insercion de la seccion 4: Armenia 1-10,
-        -- Calarca 11-15, Montenegro 16-19, Quimbaya 20-22,
-        -- La Tebaida 23-24, Circasia 25-26, Salento 27-34,
-        -- Filandia 35-40, Buenavista 41, Cordoba 42-43, Pijao 44-45,
-        -- Genova 46).
         IF DBMS_RANDOM.VALUE(0,1) < 0.55 THEN
-            -- 55% de las reservas en Armenia o Salento (polos turisticos)
             IF DBMS_RANDOM.VALUE(0,1) < 0.5 THEN
-                v_id_alojamiento := TRUNC(DBMS_RANDOM.VALUE(1, 11));   -- Armenia
+                v_id_alojamiento := TRUNC(DBMS_RANDOM.VALUE(1, 11));
             ELSE
-                v_id_alojamiento := TRUNC(DBMS_RANDOM.VALUE(27, 35));  -- Salento
+                v_id_alojamiento := TRUNC(DBMS_RANDOM.VALUE(27, 35));
             END IF;
         ELSE
-            v_id_alojamiento := TRUNC(DBMS_RANDOM.VALUE(1, 47));       -- cualquiera
+            v_id_alojamiento := TRUNC(DBMS_RANDOM.VALUE(1, 47));
         END IF;
 
-        v_id_cliente := TRUNC(DBMS_RANDOM.VALUE(1, 201));
+        v_id_cliente := TRUNC(DBMS_RANDOM.VALUE(1, 2501));
 
-        -- --- estado: si el checkin ya paso respecto a "hoy", se
-        -- reparte entre Completada/Cancelada; si es futuro, entre
-        -- Pendiente/Confirmada.
         IF v_checkin < v_hoy THEN
             v_estado := CASE WHEN DBMS_RANDOM.VALUE(0,1) < 0.85 THEN 'Completada' ELSE 'Cancelada' END;
         ELSE
@@ -307,9 +267,8 @@ BEGIN
         END IF;
 
         INSERT INTO reserva (id_reserva, fecha_checkin, fecha_checkout, estado, id_cliente, id_alojamiento)
-        VALUES (v_mi_reserva, v_checkin, v_checkout, v_estado, v_id_cliente, v_id_alojamiento);
+        VALUES (v_id_reserva, v_checkin, v_checkout, v_estado, v_id_cliente, v_id_alojamiento);
 
-        -- --- 1 a 3 habitaciones por reserva (la mayoria, 1 sola)
         v_num_habs := CASE WHEN DBMS_RANDOM.VALUE(0,1) < 0.75 THEN 1
                             WHEN DBMS_RANDOM.VALUE(0,1) < 0.9  THEN 2
                             ELSE 3 END;
@@ -317,7 +276,7 @@ BEGIN
         v_valor_estadia := 0;
 
         FOR r IN 1 .. v_num_habs LOOP
-            -- elegir una habitacion que pertenezca a ese alojamiento
+            v_id_habitacion := NULL;
             BEGIN
                 SELECT id_habitacion INTO v_id_habitacion
                 FROM (
@@ -327,43 +286,38 @@ BEGIN
                 )
                 WHERE ROWNUM = 1;
             EXCEPTION
-                WHEN NO_DATA_FOUND THEN
-                    CONTINUE;
-            END;
-
-            INSERT INTO reserva_habitacion (
-                id_reserva_habitacion, fecha_checkin, fecha_checkout,
-                cantidad_huespedes, id_reserva, id_habitacion
-            ) VALUES (
-                v_id_reserva_habitacion, v_checkin, v_checkout,
-                TRUNC(DBMS_RANDOM.VALUE(1, 5)), v_mi_reserva, v_id_habitacion
-            );
-            v_id_reserva_habitacion := v_id_reserva_habitacion + 1;
-
-            -- acumular valor aproximado de la estadia para esta
-            -- habitacion (tarifa de la temporada del checkin; es una
-            -- aproximacion razonable para la carga de datos -- el
-            -- calculo noche-a-noche exacto lo hace fn_valor_estadia
-            -- en la Entrega 2)
-            BEGIN
-                SELECT t.precio_noche INTO v_valor_noche
-                FROM tarifa t
-                JOIN temporada tmp ON tmp.id_temporada = t.id_temporada
-                WHERE t.id_habitacion = v_id_habitacion
-                  AND v_checkin BETWEEN tmp.fecha_inicio AND tmp.fecha_fin
-                  AND ROWNUM = 1;
-                v_valor_estadia := v_valor_estadia + v_valor_noche * (v_checkout - v_checkin);
-            EXCEPTION
                 WHEN NO_DATA_FOUND THEN NULL;
             END;
+
+            IF v_id_habitacion IS NOT NULL THEN
+                INSERT INTO reserva_habitacion (
+                    id_reserva_habitacion, fecha_checkin, fecha_checkout,
+                    cantidad_huespedes, id_reserva, id_habitacion
+                ) VALUES (
+                    v_id_reserva_habitacion, v_checkin, v_checkout,
+                    TRUNC(DBMS_RANDOM.VALUE(1, 5)), v_id_reserva, v_id_habitacion
+                );
+                v_id_reserva_habitacion := v_id_reserva_habitacion + 1;
+
+                BEGIN
+                    SELECT t.precio_noche INTO v_valor_noche
+                    FROM tarifa t
+                    JOIN temporada tmp ON tmp.id_temporada = t.id_temporada
+                    WHERE t.id_habitacion = v_id_habitacion
+                      AND v_checkin BETWEEN tmp.fecha_inicio AND tmp.fecha_fin
+                      AND ROWNUM = 1;
+                    v_valor_estadia := v_valor_estadia + v_valor_noche * (v_checkout - v_checkin);
+                EXCEPTION
+                    WHEN NO_DATA_FOUND THEN NULL;
+                END;
+            END IF;
         END LOOP;
 
-        -- --- servicios opcionales (40% de las reservas incluyen 1-3)
         IF DBMS_RANDOM.VALUE(0,1) < 0.4 THEN
             v_servicios_count := TRUNC(DBMS_RANDOM.VALUE(1, 4));
             FOR s IN 1 .. v_servicios_count LOOP
                 DECLARE
-                    v_id_servicio NUMBER;
+                    v_id_servicio NUMBER := NULL;
                 BEGIN
                     SELECT id_servicio INTO v_id_servicio FROM (
                         SELECT id_servicio FROM servicio
@@ -371,30 +325,30 @@ BEGIN
                         ORDER BY DBMS_RANDOM.VALUE
                     ) WHERE ROWNUM = 1;
 
-                    INSERT INTO reserva_servicio (id_reserva_servicio, cantidad, id_reserva, id_servicio)
-                    VALUES (v_id_reserva_servicio, TRUNC(DBMS_RANDOM.VALUE(1,4)), v_mi_reserva, v_id_servicio);
-                    v_id_reserva_servicio := v_id_reserva_servicio + 1;
+                    IF v_id_servicio IS NOT NULL THEN
+                        INSERT INTO reserva_servicio (id_reserva_servicio, cantidad, id_reserva, id_servicio)
+                        VALUES (v_id_reserva_servicio, TRUNC(DBMS_RANDOM.VALUE(1,4)), v_id_reserva, v_id_servicio);
+                        v_id_reserva_servicio := v_id_reserva_servicio + 1;
+                    END IF;
                 EXCEPTION
-                    WHEN NO_DATA_FOUND THEN NULL;  -- este alojamiento no tiene servicios cargados
-                    WHEN DUP_VAL_ON_INDEX THEN NULL;  -- esta reserva ya incluia ese mismo servicio, se omite
+                    WHEN NO_DATA_FOUND THEN NULL;
+                    WHEN DUP_VAL_ON_INDEX THEN NULL;
                 END;
             END LOOP;
         END IF;
 
-        -- --- pagos: si la reserva no esta Pendiente, al menos un
-        -- pago; algunas en dos abonos.
         IF v_estado != 'Pendiente' AND v_valor_estadia > 0 THEN
             IF DBMS_RANDOM.VALUE(0,1) < 0.3 THEN
-                -- dos abonos: 40% anticipo + 60% saldo
                 INSERT INTO pago (id_pago, fecha_pago, monto, metodo, estado, id_reserva)
                 VALUES (v_id_pago, v_checkin - 10, ROUND(v_valor_estadia * 0.4),
-                        'Transferencia', 'Exitoso', v_mi_reserva);
+                        'Transferencia', 'Exitoso', v_id_reserva);
                 v_id_pago := v_id_pago + 1;
+
                 INSERT INTO pago (id_pago, fecha_pago, monto, metodo, estado, id_reserva)
                 VALUES (v_id_pago, v_checkin, ROUND(v_valor_estadia * 0.6),
                         'Tarjeta credito',
                         CASE WHEN v_estado = 'Cancelada' THEN 'Reembolsado' ELSE 'Exitoso' END,
-                        v_mi_reserva);
+                        v_id_reserva);
                 v_id_pago := v_id_pago + 1;
             ELSE
                 INSERT INTO pago (id_pago, fecha_pago, monto, metodo, estado, id_reserva)
@@ -403,29 +357,23 @@ BEGIN
                             WHEN 1 THEN 'PSE' WHEN 2 THEN 'Tarjeta debito'
                             WHEN 3 THEN 'Transferencia' ELSE 'Efectivo' END,
                         CASE WHEN v_estado = 'Cancelada' THEN 'Reembolsado' ELSE 'Exitoso' END,
-                        v_mi_reserva);
+                        v_id_reserva);
                 v_id_pago := v_id_pago + 1;
             END IF;
         END IF;
 
-        -- --- resena: solo reservas Completada, y no todas (65%)
         IF v_estado = 'Completada' AND DBMS_RANDOM.VALUE(0,1) < 0.65 THEN
             INSERT INTO resena (id_resena, calificacion, comentario, fecha_resena, id_reserva)
             VALUES (v_id_resena, TRUNC(DBMS_RANDOM.VALUE(2,6)),
-                    'Estadia registrada en la plataforma.', v_checkout + 1, v_mi_reserva);
+                    'Estadia registrada en la plataforma.', v_checkout + 1, v_id_reserva);
             v_id_resena := v_id_resena + 1;
         END IF;
 
-      EXCEPTION
-          WHEN OTHERS THEN
-              NULL;  -- se salta esta reserva puntual y continua con la siguiente
-      END;
+        v_id_reserva := v_id_reserva + 1;
     END LOOP;
     COMMIT;
 END;
 /
-
-
 -- ---------------------------------------------------------------------
 -- 8. USUARIO_SISTEMA
 -- 3 administradores (globales, sin alojamiento) + 1 encargado por
@@ -452,6 +400,13 @@ BEGIN
 END;
 /
 
+-- ---------------------------------------------------------------------
+-- VERIFICACIÓN DE TOTALES
+-- ---------------------------------------------------------------------
+SELECT 'reserva' AS tabla, COUNT(*) AS filas FROM reserva
+UNION ALL SELECT 'reserva_habitacion', COUNT(*) FROM reserva_habitacion
+UNION ALL SELECT 'pago', COUNT(*) FROM pago
+UNION ALL SELECT 'resena', COUNT(*) FROM resena;
 
 -- ---------------------------------------------------------------------
 -- VERIFICACION RAPIDA

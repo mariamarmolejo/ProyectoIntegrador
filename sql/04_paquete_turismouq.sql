@@ -12,9 +12,8 @@
 --   * sp_liquidacion_masiva   proceso masivo: liquida TODOS los
 --                             alojamientos de un mes con el mismo cursor
 --
--- Requiere haber corrido 01_ddl y 02_carga (esquema TURISMO).
--- Para ver los mensajes de DBMS_OUTPUT hay que abrir el panel de salida
--- de DBeaver (Ctrl+Shift+O).
+-- Requiere haber corrido 01_ddl y 02_carga en el mismo usuario.
+-- Ejecutar con F5 (Run Script) en SQL Developer.
 --
 -- Codigos de error que lanza el paquete (RAISE_APPLICATION_ERROR):
 --   -20001  fechas invalidas (salida no posterior a la entrada)

@@ -1,23 +1,27 @@
 -- =====================================================================
 -- PROYECTO INTEGRADOR - TurismoUQ - Bases de Datos II - 2026-2
--- 00_reset_turismouq.sql
+-- 00_reset.sql
+-- Equipo: Daniela Munoz, Maria Jose Marmolejo, Santiago Ovalle
 --
--- Solo lo usan si YA habian corrido 01_ddl_turismouq.sql antes y
--- quieren empezar de cero sobre la MISMA conexion (por ejemplo,
--- porque cambiaron algo del modelo). Si nunca han corrido el DDL en
--- esta conexion, NO hace falta correr este archivo.
+-- OPCIONAL. Solo se usa para volver a empezar de cero en un usuario
+-- donde YA se corrieron los scripts. En un usuario nuevo NO hace falta.
 --
--- Son 15 sentencias DROP TABLE sueltas, sin PL/SQL ni bloques: cada
--- una se ejecuta y se evalua por separado, igual que cualquier
--- sentencia normal.
+-- Borra primero los objetos de la Entrega 2 (vista materializada,
+-- historico, paquete, tablespace) y despues las 15 tablas de la
+-- Entrega 1 (los disparadores se borran junto con sus tablas).
 --
--- COMO EJECUTARLO: con "Run Script" (F5). Si alguna tabla no existe
--- todavia, esa linea especifica va a mostrar un error "ORA-00942:
--- la tabla o vista no existe" -- es normal y esperado, simplemente
--- le dan "Saltar" (o "Skip all" para que no les pregunte en cada
--- una) y el script sigue con las demas sin problema.
+-- COMO EJECUTARLO: con F5 (Run Script). Si un objeto no existe, esa
+-- linea muestra un error (ORA-00942, ORA-04043, ORA-12003 o
+-- ORA-00959): es normal, el script sigue con las demas.
 -- =====================================================================
 
+-- Entrega 2
+DROP MATERIALIZED VIEW mv_ocupacion_mensual;
+DROP TABLE reserva_historico PURGE;
+DROP PACKAGE pkg_reservas;
+DROP TABLESPACE ts_historial_reservas INCLUDING CONTENTS AND DATAFILES;
+
+-- Entrega 1
 DROP TABLE auditoria_tarifa CASCADE CONSTRAINTS PURGE;
 DROP TABLE resena CASCADE CONSTRAINTS PURGE;
 DROP TABLE reserva_servicio CASCADE CONSTRAINTS PURGE;
@@ -34,11 +38,11 @@ DROP TABLE cliente CASCADE CONSTRAINTS PURGE;
 DROP TABLE tipo_alojamiento CASCADE CONSTRAINTS PURGE;
 DROP TABLE municipio CASCADE CONSTRAINTS PURGE;
 
--- Verificacion: esta consulta debe devolver 0 filas si el reset
--- quedo completo.
-SELECT table_name FROM user_tables
-WHERE table_name IN (
+-- Verificacion: debe devolver 0 filas
+SELECT object_name, object_type
+  FROM user_objects
+ WHERE object_name IN (
     'MUNICIPIO','TIPO_ALOJAMIENTO','CLIENTE','TEMPORADA','ALOJAMIENTO',
     'HABITACION','TARIFA','SERVICIO','USUARIO_SISTEMA','RESERVA',
-    'RESERVA_HABITACION','PAGO','RESERVA_SERVICIO','RESENA','AUDITORIA_TARIFA'
-);
+    'RESERVA_HABITACION','PAGO','RESERVA_SERVICIO','RESENA','AUDITORIA_TARIFA',
+    'RESERVA_HISTORICO','MV_OCUPACION_MENSUAL','PKG_RESERVAS');

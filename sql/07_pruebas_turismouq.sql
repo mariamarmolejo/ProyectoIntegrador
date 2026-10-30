@@ -5,21 +5,23 @@
 -- Equipo: Daniela Munoz, Maria Jose Marmolejo, Santiago Ovalle
 --
 -- Se corre DESPUES de 04, 05 y 06.
--- Como correrlo en DBeaver:
---   * Abrir el panel de salida (Ctrl+Shift+O) para ver DBMS_OUTPUT.
---   * Todo el script: Alt+X. Un bloque suelto: clic dentro y Ctrl+Enter.
---   * Cada bloque termina en "/" y va seguido de una LINEA EN BLANCO:
---     sin ella DBeaver pega dos bloques en uno (por eso antes salia
---     ORA-00900 en el caso del alojamiento 999).
---   * Dentro de los bloques PL/SQL las separaciones son "--" y no
---     lineas en blanco, por la misma razon.
+-- Como correrlo en Oracle SQL Developer:
+--   * Primero ejecutar SET SERVEROUTPUT ON (abajo) con F5, para que los
+--     bloques muestren sus mensajes en la pestana Script Output.
+--   * Consultas SELECT: cursor dentro y Ctrl+Enter (pestana Query Result).
+--   * Bloques BEGIN ... END: seleccionarlo completo, hasta la "/", y F5.
+--   * Todo el script de una vez: F5 sin seleccionar nada.
 --
 -- Los bloques PL/SQL terminan en ROLLBACK, asi las pruebas no dejan
 -- datos. Solo la prueba 7 hace COMMIT (la vista materializada solo ve
 -- datos confirmados) y al final borra lo que creo.
 -- Las fechas de prueba son de enero de 2027, donde la carga no tiene
 -- reservas (y 2030 para "sin temporada").
+-- La carga usa una semilla fija (DBMS_RANDOM.SEED), asi que los
+-- resultados son los mismos en cualquier computador.
 -- =====================================================================
+
+SET SERVEROUTPUT ON
 
 
 -- =====================================================================
@@ -74,10 +76,10 @@ SELECT (SELECT SUM(t.precio_noche)
        pkg_reservas.fn_valor_estadia(1, DATE '2026-10-09', DATE '2026-10-15') AS valor_funcion
   FROM dual;
 
--- Resultado esperado: 6 filas (2 Media, 3 Alta, 1 Baja) y
--- suma_a_mano = valor_funcion.
--- Resultado obtenido (21/10): 97.000 + 97.000 + 3 x 133.000 + 67.000
--- = 660.000 = valor_funcion.
+-- Resultado esperado: 6 filas (9 y 10 en 'Media agosto-octubre 2026',
+-- 11 a 13 en 'Puente festivo octubre 2026', 14 en 'Baja
+-- octubre-noviembre 2026') y suma_a_mano = valor_funcion.
+-- Resultado obtenido:
 
 -- 1.c Casos de error de la funcion
 BEGIN
@@ -334,7 +336,7 @@ END;
 
 -- =====================================================================
 -- PRUEBA 4: disparador TRG_TARIFA_AUDITORIA (escritura por sentencia)
--- Un solo UPDATE sube 1000 a las tarifas de la habitacion 1. Debe
+-- Un solo UPDATE sube 1000 a las 22 tarifas de la habitacion 1. Debe
 -- quedar un renglon de auditoria por tarifa, todos con la misma fecha,
 -- con usuario, precio anterior y precio nuevo. Un UPDATE que deja el
 -- precio igual no debe auditar nada.
@@ -371,9 +373,9 @@ END;
 /
 
 -- Resultado esperado: 0 renglones con el UPDATE sin cambio; con el
--- de +1000, tantos renglones como filas modificadas, misma fecha y
--- precio_nuevo = precio_anterior + 1000.
--- Resultado obtenido (21/10): 0 y 9 renglones.
+-- de +1000, 22 filas modificadas (una tarifa por temporada) y 22
+-- renglones, misma fecha y precio_nuevo = precio_anterior + 1000.
+-- Resultado obtenido:
 
 
 -- =====================================================================

@@ -11,12 +11,15 @@
 --
 -- Requiere 04_paquete (la carga del historico usa fn_valor_estadia).
 -- El usuario necesita CREATE TABLESPACE y CREATE MATERIALIZED VIEW.
+-- Ejecutar con F5 (Run Script) en SQL Developer.
 --
 -- Para volver a correr este script desde cero (solo en pruebas):
 --   DROP MATERIALIZED VIEW mv_ocupacion_mensual;
 --   DROP TABLE reserva_historico PURGE;
 --   DROP TABLESPACE ts_historial_reservas INCLUDING CONTENTS AND DATAFILES;
 -- =====================================================================
+
+SET SERVEROUTPUT ON
 
 
 -- ---------------------------------------------------------------------
@@ -62,7 +65,7 @@ BEGIN
     EXCEPTION
         WHEN OTHERS THEN v_omf := NULL;
     END;
-
+--
     IF v_omf IS NOT NULL THEN
         v_sql := 'CREATE TABLESPACE ts_historial_reservas DATAFILE' || v_resto;
     ELSE
@@ -72,33 +75,42 @@ BEGIN
                 || ' WHERE tablespace_name = (SELECT default_tablespace FROM user_users)'
                 || ' AND ROWNUM = 1'
                 INTO v_archivo;
+            -- carpeta = todo hasta la ultima barra (\ en Windows, / en Linux)
             v_dir := SUBSTR(v_archivo, 1,
                             GREATEST(INSTR(v_archivo, '\', -1), INSTR(v_archivo, '/', -1)));
         EXCEPTION
             WHEN OTHERS THEN v_dir := NULL;
         END;
-
+--
         v_sql := 'CREATE TABLESPACE ts_historial_reservas DATAFILE '''
                  || v_dir || 'TS_HISTORIAL_RESERVAS01.DBF''' || v_resto;
     END IF;
-
+--
+    DBMS_OUTPUT.PUT_LINE('Ejecutando: ' || v_sql);
     BEGIN
         EXECUTE IMMEDIATE v_sql;
         DBMS_OUTPUT.PUT_LINE('Tablespace TS_HISTORIAL_RESERVAS creado.');
     EXCEPTION
         WHEN OTHERS THEN
+            -- ORA-01543: ya existe (por ejemplo, de una corrida anterior)
             IF SQLCODE = -1543 THEN
-                DBMS_OUTPUT.PUT_LINE('El tablespace TS_HISTORIAL_RESERVAS ya existe, continuando...');
+                DBMS_OUTPUT.PUT_LINE('El tablespace TS_HISTORIAL_RESERVAS ya existe, se reutiliza.');
             ELSE
                 RAISE;
             END IF;
     END;
-
+--
+    -- Cuota del usuario sobre el tablespace nuevo. Si el usuario ya
+    -- tiene UNLIMITED TABLESPACE no hace falta; si no tiene permiso de
+    -- ALTER USER, un administrador debe darla con:
+    --   ALTER USER <usuario> QUOTA UNLIMITED ON ts_historial_reservas;
     BEGIN
         EXECUTE IMMEDIATE 'ALTER USER ' || SYS_CONTEXT('USERENV', 'SESSION_USER')
                           || ' QUOTA UNLIMITED ON ts_historial_reservas';
+        DBMS_OUTPUT.PUT_LINE('Cuota asignada al usuario ' || SYS_CONTEXT('USERENV', 'SESSION_USER'));
     EXCEPTION
-        WHEN OTHERS THEN NULL;
+        WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Aviso, no se asigno cuota: ' || SQLERRM);
     END;
 END;
 /
@@ -114,7 +126,7 @@ END;
 -- valor_habitaciones queda NULL si alguna noche de la reserva no tenia
 -- tarifa en la carga (dato a revisar, no se inventa un valor).
 -- ---------------------------------------------------------------------
-TABLE reserva_historico (
+CREATE TABLE reserva_historico (
     id_reserva          NUMBER        NOT NULL,
     fecha_checkin       DATE          NOT NULL,
     fecha_checkout      DATE          NOT NULL,
@@ -132,7 +144,8 @@ CREATE INDEX reserva_historico_ix_aloj
     ON reserva_historico (id_alojamiento, fecha_checkin)
     TABLESPACE ts_historial_reservas;
 
--- Carga del historico sobre las 25.500 reservas
+-- Carga del historico. Se hace en un bucle para que una reserva sin
+-- tarifa no tumbe toda la carga: se archiva con valor NULL y se cuenta.
 DECLARE
     v_corte   CONSTANT DATE := DATE '2026-07-01';
     v_valor   NUMBER;
@@ -160,7 +173,7 @@ BEGIN
                     RAISE;
                 END IF;
         END;
-
+--
         INSERT INTO reserva_historico (id_reserva, fecha_checkin, fecha_checkout,
                                        estado, id_cliente, id_alojamiento,
                                        valor_habitaciones)
@@ -168,12 +181,13 @@ BEGIN
                 r.id_cliente, r.id_alojamiento, v_valor);
         v_total := v_total + 1;
     END LOOP;
-
+--
     COMMIT;
     DBMS_OUTPUT.PUT_LINE('Reservas archivadas: ' || v_total
         || ' (sin tarifa completa, valor NULL: ' || v_sin || ')');
 END;
 /
+
 
 -- ---------------------------------------------------------------------
 -- 3. Vista materializada de ocupacion mensual
@@ -256,11 +270,12 @@ SELECT a.id_alojamiento,
               GROUP BY n.id_alojamiento, TRUNC(n.noche, 'MM')) o
     ON o.id_alojamiento = a.id_alojamiento
    AND o.mes            = m.mes;
-   
--- ------------------------------------------------------------------------------
--- --------------------Verificación del Funcionamiento---------------------------
--- ------------------------------------------------------------------------------
 
-SELECT (SELECT COUNT(*) FROM reserva_historico) AS filas_historico,
-       (SELECT COUNT(*) FROM mv_ocupacion_mensual) AS filas_vista
-FROM dual;
+-- Revision rapida
+SELECT mview_name, refresh_mode, refresh_method, last_refresh_date
+  FROM user_mviews
+ WHERE mview_name = 'MV_OCUPACION_MENSUAL';
+
+SELECT COUNT(*) AS filas, MIN(mes) AS primer_mes, MAX(mes) AS ultimo_mes,
+       MAX(pct_ocupacion) AS max_pct
+  FROM mv_ocupacion_mensual;

@@ -6,14 +6,27 @@
 -- OPCIONAL. Solo se usa para volver a empezar de cero en un usuario
 -- donde YA se corrieron los scripts. En un usuario nuevo NO hace falta.
 --
--- Borra primero los objetos de la Entrega 2 (vista materializada,
--- historico, paquete, tablespace) y despues las 15 tablas de la
--- Entrega 1 (los disparadores se borran junto con sus tablas).
+-- Borra primero los objetos de la Entrega 3 (vistas de seguridad y
+-- paquete de transacciones; los indices se van con sus tablas), luego
+-- los de la Entrega 2 (vista materializada, historico, paquete,
+-- tablespace) y despues las 15 tablas de la Entrega 1 (los
+-- disparadores se borran junto con sus tablas).
 --
 -- COMO EJECUTARLO: con F5 (Run Script). Si un objeto no existe, esa
 -- linea muestra un error (ORA-00942, ORA-04043, ORA-12003 o
 -- ORA-00959): es normal, el script sigue con las demas.
+-- Los usuarios, roles y el perfil de la Entrega 3 no son del esquema:
+-- se borran al principio del script 11 (como SYSTEM).
 -- =====================================================================
+
+-- Entrega 3
+DROP VIEW v_recepcion_reservas;
+DROP VIEW v_recepcion_habitaciones;
+DROP VIEW v_recepcion_clientes;
+DROP VIEW v_mis_habitaciones;
+DROP VIEW v_mis_tarifas;
+DROP VIEW v_mis_reservas;
+DROP PACKAGE pkg_transacciones;
 
 -- Entrega 2
 DROP MATERIALIZED VIEW mv_ocupacion_mensual;
@@ -45,4 +58,6 @@ SELECT object_name, object_type
     'MUNICIPIO','TIPO_ALOJAMIENTO','CLIENTE','TEMPORADA','ALOJAMIENTO',
     'HABITACION','TARIFA','SERVICIO','USUARIO_SISTEMA','RESERVA',
     'RESERVA_HABITACION','PAGO','RESERVA_SERVICIO','RESENA','AUDITORIA_TARIFA',
-    'RESERVA_HISTORICO','MV_OCUPACION_MENSUAL','PKG_RESERVAS');
+    'RESERVA_HISTORICO','MV_OCUPACION_MENSUAL','PKG_RESERVAS','PKG_TRANSACCIONES',
+    'V_RECEPCION_RESERVAS','V_RECEPCION_HABITACIONES','V_RECEPCION_CLIENTES',
+    'V_MIS_HABITACIONES','V_MIS_TARIFAS','V_MIS_RESERVAS');
